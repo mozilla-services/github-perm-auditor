@@ -10,6 +10,8 @@ import (
 type PermConfig struct {
 	Debug       bool
 	GithubToken string `required:"true"`
+	Username    string
+	Password    string
 }
 
 // GetConfig gets PermConfig from env
