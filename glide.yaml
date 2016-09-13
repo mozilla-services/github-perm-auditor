@@ -2,3 +2,9 @@ package: github.com/mozilla-services/perm
 import:
 - package: github.com/kelseyhightower/envconfig
   version: ^1.1.0
+- package: github.com/google/go-github
+  subpackages:
+  - github
+- package: github.com/google/go-querystring
+  subpackages:
+  - query
