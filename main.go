@@ -5,10 +5,8 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/mozilla-services/perm/config"
-
 	"github.com/google/go-github/github"
-	"golang.org/x/oauth2"
+	"github.com/mozilla-services/perm/config"
 )
 
 var (
@@ -16,74 +14,147 @@ var (
 	client *github.Client
 )
 
-func main() {
-	conf = config.GetConfig()
-
-	tok := oauth2.Token{AccessToken: conf.GithubToken}
-	ts := oauth2.StaticTokenSource(
-		&tok,
-	)
-	tc := oauth2.NewClient(oauth2.NoContext, ts)
-	client = github.NewClient(tc)
-
-	user, _, err := client.Users.Get("")
-	if err != nil {
-		log.Fatalf("[error] github: %s", err.Error())
-	}
-	if conf.Debug {
-		log.Printf("[debug] authenticated as user: %s", *user.Login)
-	}
-
-	auditUser(user)
+func init() {
+	log.SetPrefix("perm: ")
 }
 
-func auditUser(user *github.User) {
-	// get user's authorizations
-	// opt := &github.ListOptions{PerPage: 100}
-	// var allAuths []*github.Authorization
-	// for {
-	// 	auths, resp, err := client.Authorizations.List(opt)
-	// 	if err != nil {
-	// 		log.Fatalf("[error] listing authorizations for %s: %s", *user.Login, err.Error())
-	// 	}
-	// 	if resp.NextPage == 0 {
-	// 		break
-	// 	}
-	// 	allAuths = append(allAuths, auths...)
-	// 	opt.Page = resp.NextPage
-	// }
+func main() {
+	var (
+		otp string
+	)
 
-	// // get user's grants
-	req, err := client.NewRequest(http.MethodGet, "/authorizations", nil)
-	if err != nil {
-		log.Fatalf("[error] NewRequest: %s", err.Error())
+	// envconfig
+	conf = config.GetConfig()
+
+	// get username
+	if conf.GithubUsername == "" {
+		log.Println("Enter GitHub username")
+		conf.GithubUsername = scan()
 	}
-	req.SetBasicAuth(conf.Username, conf.Password)
 
-	var otp string
+	// get password
+	if conf.GithubPassword == "" {
+		log.Println("Enter GitHub password")
+		conf.GithubPassword = scan()
+	}
+
+	// get OTP code from stdin
 	log.Println("Enter GitHub 2FA code if applicable")
-	n, err := fmt.Scanln(&otp)
+	otp = scan()
+
+	client = github.NewClient(&http.Client{})
+
+	log.Printf("Auditing authorizations for user %q", conf.GithubUsername)
+	auditAuthorizations(otp)
+
+	log.Printf("Auditing grants for user %q", conf.GithubUsername)
+	auditGrants(otp)
+}
+
+func scan() string {
+	var input string
+	_, err := fmt.Scanln(&input)
 	if err != nil {
 		log.Fatalf("[error] Scanln: %s", err.Error())
 	}
 	if conf.Debug {
-		log.Printf("[debug] Got OTP %s", otp)
+		log.Printf("[debug] Read value %s", input)
 	}
-	if n > 0 {
+	return input
+}
+
+func makeReq(url, otp string) (*http.Request, error) {
+	req, err := client.NewRequest(http.MethodGet, "/authorizations", nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(otp) > 0 {
+		// OTP header
 		req.Header.Set("X-Github-OTP", otp)
 	}
+
+	// required for preview API, see: https://developer.github.com/v3/oauth_authorizations/
 	req.Header.Set("Accept", "application/vnd.github.damage-preview")
-	var grants []*github.Grant
-	_, err = client.Do(req, &grants)
-	if err != nil {
-		log.Fatalf("[error] Do: %s", err.Error())
+	req.SetBasicAuth(conf.GithubUsername, conf.GithubPassword)
+	return req, err
+}
+
+func isScopeRelevant(scope string) bool {
+	if scope == string(github.ScopeUserEmail) ||
+		scope == string(github.ScopeUserFollow) ||
+		scope == string(github.ScopeNone) ||
+		scope == string(github.ScopeNotifications) ||
+		scope == string(github.ScopeGist) ||
+		scope == string(github.ScopeReadPublicKey) ||
+		scope == string(github.ScopeReadGPGKey) {
+		return false
 	}
-	log.Println(grants)
-	// grants, _, err := client.Authorizations.ListGrants()
-	// if err != nil {
-	// 	log.Fatalf("[error] listing grants for %s: %s", *user.Login, err.Error())
-	// }
-	// for _, grant := range grants {
-	// 	log.Printf("[info] mcrabill has a grant for %s", *grant.App.Name)
-	// }
+	return true
+}
+
+func auditAuthorizations(otp string) {
+	req, err := makeReq("/authorizations", otp)
+	if err != nil {
+		log.Fatalf("[error] could not make authorizations request: %v", err.Error())
+	}
+	var authorizations []*github.Authorization
+	resp, err := client.Do(req, &authorizations)
+	if err != nil || resp.StatusCode != 200 {
+		log.Fatalf("[error] Do: %v, status %s", err.Error(), resp.Status)
+	}
+	for _, auth := range authorizations {
+		hasRelevantScope := false
+		for _, scope := range auth.Scopes {
+			if relevant := isScopeRelevant(string(scope)); relevant {
+				hasRelevantScope = true
+			}
+		}
+		if !hasRelevantScope {
+			if conf.Debug {
+				log.Printf("authorization for %q has no relevant scope (has %v)", *auth.App.Name, auth.Scopes)
+			}
+			continue
+		}
+		log.Printf("authorization for %q, (%d) was created %s, last updated %s, has scopes: %v\n",
+			*auth.App.Name,
+			*auth.ID,
+			auth.CreatedAt.Format("02 Jan 06"),
+			auth.UpdateAt.Format("02 Jan 06"),
+			auth.Scopes,
+		)
+	}
+}
+
+func auditGrants(otp string) {
+	req, err := makeReq("/applications/grants", otp)
+	if err != nil {
+		log.Fatalf("[error] could not make grants request: %v", err.Error())
+	}
+	var grants []*github.Grant
+	resp, err := client.Do(req, &grants)
+	if err != nil || resp.StatusCode != 200 {
+		log.Fatalf("[error] Do: %v, status %s", err.Error(), resp.Status)
+	}
+	for _, grant := range grants {
+		hasRelevantScope := false
+		for _, scope := range grant.Scopes {
+			if relevant := isScopeRelevant(scope); relevant {
+				hasRelevantScope = true
+			}
+		}
+		if !hasRelevantScope {
+			if conf.Debug {
+				log.Printf("grant for %q has no relevant scope (has %v)", *grant.App.Name, grant.Scopes)
+			}
+			continue
+		}
+		log.Printf("grant for %q (%d) was created %s, last updated %s, has scopes: %v\n",
+			*grant.App.Name,
+			*grant.ID,
+			grant.CreatedAt.Format("02 Jan 06"),
+			grant.UpdatedAt.Format("02 Jan 06"),
+			grant.Scopes,
+		)
+	}
 }
