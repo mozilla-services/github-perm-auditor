@@ -8,10 +8,10 @@ import (
 
 // PermConfig is config for perm
 type PermConfig struct {
-	Debug       bool
-	GithubToken string `required:"true"`
-	Username    string
-	Password    string
+	Debug          bool
+	GithubToken    string `required:"true"`
+	GithubUsername string `required:"true"`
+	Password       string `required:"true"`
 }
 
 // GetConfig gets PermConfig from env

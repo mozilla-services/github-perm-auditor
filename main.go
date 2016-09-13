@@ -54,17 +54,17 @@ func auditUser(user *github.User) {
 	// }
 
 	// // get user's grants
-	req, err := client.NewRequest(http.MethodGet, "/applications/grants", nil)
+	req, err := client.NewRequest(http.MethodGet, "/authorizations", nil)
 	if err != nil {
-		log.Fatalf("[error] %s", err.Error())
+		log.Fatalf("[error] NewRequest: %s", err.Error())
 	}
-	req.SetBasicAuth(*user.Login, conf.Password)
+	req.SetBasicAuth(conf.Username, conf.Password)
 
 	var otp string
 	log.Println("Enter GitHub 2FA code if applicable")
 	n, err := fmt.Scanln(&otp)
 	if err != nil {
-		log.Fatalf("[error] %s", err.Error())
+		log.Fatalf("[error] Scanln: %s", err.Error())
 	}
 	if conf.Debug {
 		log.Printf("[debug] Got OTP %s", otp)
@@ -72,11 +72,11 @@ func auditUser(user *github.User) {
 	if n > 0 {
 		req.Header.Set("X-Github-OTP", otp)
 	}
-	// req.Header.Set("Accept", "application/vnd.github.damage-preview")
+	req.Header.Set("Accept", "application/vnd.github.damage-preview")
 	var grants []*github.Grant
 	_, err = client.Do(req, &grants)
 	if err != nil {
-		log.Fatalf("[error] %s", err.Error())
+		log.Fatalf("[error] Do: %s", err.Error())
 	}
 	log.Println(grants)
 	// grants, _, err := client.Authorizations.ListGrants()
