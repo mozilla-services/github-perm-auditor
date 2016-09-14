@@ -6,7 +6,7 @@ import (
 	"net/http"
 
 	"github.com/google/go-github/github"
-	"github.com/mozilla-services/perm/config"
+	"github.com/milescrabill/perm/config"
 )
 
 var (
