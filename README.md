@@ -1,13 +1,12 @@
-## `perm`
-### `perm` checks user account permissions on Github
+## `perm` checks user account permissions on Github
 
-#### Installation
+### Installation
 `go get github.com/milescrabill/perm`
 
-#### Running
+### Running
 `perm` -> follow prompts
 
-#### Configuration
+### Configuration
 `perm` uses env for config.
 The following env variables can be exported to configure `perm`
 
