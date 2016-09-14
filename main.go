@@ -44,10 +44,10 @@ func main() {
 
 	client = github.NewClient(&http.Client{})
 
-	log.Printf("Auditing authorizations for user %q", conf.GithubUsername)
+	log.Printf("[info] Auditing authorizations for user %q", conf.GithubUsername)
 	auditAuthorizations(otp)
 
-	log.Printf("Auditing grants for user %q", conf.GithubUsername)
+	log.Printf("[info] Auditing grants for user %q", conf.GithubUsername)
 	auditGrants(otp)
 }
 
@@ -81,13 +81,14 @@ func makeReq(url, otp string) (*http.Request, error) {
 }
 
 func isScopeRelevant(scope string) bool {
-	if scope == string(github.ScopeUserEmail) ||
-		scope == string(github.ScopeUserFollow) ||
-		scope == string(github.ScopeNone) ||
-		scope == string(github.ScopeNotifications) ||
-		scope == string(github.ScopeGist) ||
-		scope == string(github.ScopeReadPublicKey) ||
-		scope == string(github.ScopeReadGPGKey) {
+	switch github.Scope(scope) {
+	case github.ScopeUserEmail,
+		github.ScopeUserFollow,
+		github.ScopeNone,
+		github.ScopeNotifications,
+		github.ScopeGist,
+		github.ScopeReadPublicKey,
+		github.ScopeReadGPGKey:
 		return false
 	}
 	return true
@@ -112,11 +113,11 @@ func auditAuthorizations(otp string) {
 		}
 		if !hasRelevantScope {
 			if conf.Debug {
-				log.Printf("authorization for %q has no relevant scope (has %v)", *auth.App.Name, auth.Scopes)
+				log.Printf("[debug] authorization for %q has no relevant scope (has %v)", *auth.App.Name, auth.Scopes)
 			}
 			continue
 		}
-		log.Printf("authorization for %q, (%d) was created %s, last updated %s, has scopes: %v\n",
+		log.Printf("[info] authorization for %q, (%d) was created: %s, last updated: %s, has scopes: %v\n",
 			*auth.App.Name,
 			*auth.ID,
 			auth.CreatedAt.Format("02 Jan 06"),
@@ -145,11 +146,11 @@ func auditGrants(otp string) {
 		}
 		if !hasRelevantScope {
 			if conf.Debug {
-				log.Printf("grant for %q has no relevant scope (has %v)", *grant.App.Name, grant.Scopes)
+				log.Printf("[debug] grant for %q has no relevant scope (has %v)", *grant.App.Name, grant.Scopes)
 			}
 			continue
 		}
-		log.Printf("grant for %q (%d) was created %s, last updated %s, has scopes: %v\n",
+		log.Printf("[info] grant for %q (%d) was created: %s, last updated: %s, has scopes: %v\n",
 			*grant.App.Name,
 			*grant.ID,
 			grant.CreatedAt.Format("02 Jan 06"),
