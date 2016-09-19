@@ -7,7 +7,7 @@ import (
 
 	"github.com/google/go-github/github"
 	"github.com/howeyc/gopass"
-	"github.com/milescrabill/perm/config"
+	"go.mozilla.org/github-perm-auditor/config"
 )
 
 var (
