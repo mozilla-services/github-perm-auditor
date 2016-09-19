@@ -1,4 +1,4 @@
-package: go.mozilla.org/perm
+package: go.mozilla.org/github-perm-auditor
 import:
 - package: github.com/kelseyhightower/envconfig
   version: ^1.1.0
