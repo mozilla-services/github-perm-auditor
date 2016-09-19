@@ -13,6 +13,7 @@ import (
 var (
 	conf   config.PermConfig
 	client *github.Client
+	otp    string
 )
 
 func init() {
@@ -20,10 +21,6 @@ func init() {
 }
 
 func main() {
-	var (
-		otp string
-	)
-
 	// envconfig
 	conf = config.GetConfig()
 
@@ -49,11 +46,8 @@ func main() {
 
 	client = github.NewClient(&http.Client{})
 
-	log.Printf("[info] Auditing authorizations for user %q", conf.GithubUsername)
-	auditAuthorizations(otp)
-
-	log.Printf("[info] Auditing grants for user %q", conf.GithubUsername)
-	auditGrants(otp)
+	auditAuthorizations()
+	auditGrants()
 }
 
 func scan() string {
@@ -68,8 +62,9 @@ func scan() string {
 	return input
 }
 
-func makeReq(url, otp string) (*http.Request, error) {
-	req, err := client.NewRequest(http.MethodGet, "/authorizations", nil)
+// MakeReq creates an *http.Requestwith the required credentials for the Github Authorizations API
+func MakeReq(url, username, password, otp string) (*http.Request, error) {
+	req, err := client.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -81,7 +76,7 @@ func makeReq(url, otp string) (*http.Request, error) {
 
 	// required for preview API, see: https://developer.github.com/v3/oauth_authorizations/
 	req.Header.Set("Accept", "application/vnd.github.damage-preview")
-	req.SetBasicAuth(conf.GithubUsername, conf.GithubPassword)
+	req.SetBasicAuth(username, password)
 	return req, err
 }
 
@@ -99,8 +94,8 @@ func isScopeRelevant(scope string) bool {
 	return true
 }
 
-func auditAuthorizations(otp string) {
-	req, err := makeReq("/authorizations", otp)
+func auditAuthorizations() {
+	req, err := MakeReq("/authorizations", conf.GithubUsername, conf.GithubPassword, otp)
 	if err != nil {
 		log.Fatalf("[error] could not make authorizations request: %v", err.Error())
 	}
@@ -109,31 +104,37 @@ func auditAuthorizations(otp string) {
 	if err != nil || resp.StatusCode != 200 {
 		log.Fatalf("[error] Do: %v, status %s", err.Error(), resp.Status)
 	}
+
+	log.Printf("[info] Auditing authorizations for user %q", conf.GithubUsername)
+	fmt.Printf("Authorizations:\n")
+
+	authsByScope := make(map[github.Scope][]*github.Authorization)
 	for _, auth := range authorizations {
-		hasRelevantScope := false
 		for _, scope := range auth.Scopes {
-			if relevant := isScopeRelevant(string(scope)); relevant {
-				hasRelevantScope = true
-			}
+			authsByScope[scope] = append(authsByScope[scope], auth)
 		}
-		if !hasRelevantScope {
+	}
+
+	for scope, auths := range authsByScope {
+		if relevant := isScopeRelevant(string(scope)); !relevant {
 			if conf.Debug {
-				log.Printf("[debug] authorization for %q has no relevant scope (has %v)", *auth.App.Name, auth.Scopes)
+				log.Printf("[debug] skipping scope %s", scope)
 			}
 			continue
 		}
-		log.Printf("[info] authorization for %q, (%d) was created: %s, last updated: %s, has scopes: %v\n",
-			*auth.App.Name,
-			*auth.ID,
-			auth.CreatedAt.Format("02 Jan 06"),
-			auth.UpdateAt.Format("02 Jan 06"),
-			auth.Scopes,
-		)
+		fmt.Printf("  scope: %s\n", scope)
+		for _, auth := range auths {
+			fmt.Printf("      - authorization for %q: created %s, last updated %s\n",
+				*auth.App.Name,
+				auth.CreatedAt.Format("02 Jan 06"),
+				auth.UpdateAt.Format("02 Jan 06"),
+			)
+		}
 	}
 }
 
-func auditGrants(otp string) {
-	req, err := makeReq("/applications/grants", otp)
+func auditGrants() {
+	req, err := MakeReq("/applications/grants", conf.GithubUsername, conf.GithubPassword, otp)
 	if err != nil {
 		log.Fatalf("[error] could not make grants request: %v", err.Error())
 	}
@@ -142,25 +143,31 @@ func auditGrants(otp string) {
 	if err != nil || resp.StatusCode != 200 {
 		log.Fatalf("[error] Do: %v, status %s", err.Error(), resp.Status)
 	}
+
+	log.Printf("[info] Auditing grants for user %q", conf.GithubUsername)
+	fmt.Printf("Grants:\n")
+
+	grantsByScope := make(map[github.Scope][]*github.Grant)
 	for _, grant := range grants {
-		hasRelevantScope := false
 		for _, scope := range grant.Scopes {
-			if relevant := isScopeRelevant(scope); relevant {
-				hasRelevantScope = true
-			}
+			grantsByScope[github.Scope(scope)] = append(grantsByScope[github.Scope(scope)], grant)
 		}
-		if !hasRelevantScope {
+	}
+
+	for scope, grants := range grantsByScope {
+		if relevant := isScopeRelevant(string(scope)); !relevant {
 			if conf.Debug {
-				log.Printf("[debug] grant for %q has no relevant scope (has %v)", *grant.App.Name, grant.Scopes)
+				log.Printf("[debug] skipping scope %s", scope)
 			}
 			continue
 		}
-		log.Printf("[info] grant for %q (%d) was created: %s, last updated: %s, has scopes: %v\n",
-			*grant.App.Name,
-			*grant.ID,
-			grant.CreatedAt.Format("02 Jan 06"),
-			grant.UpdatedAt.Format("02 Jan 06"),
-			grant.Scopes,
-		)
+		fmt.Printf("  scope: %s\n", scope)
+		for _, grant := range grants {
+			fmt.Printf("      - grant for %q: created %s, last updated %s\n",
+				*grant.App.Name,
+				grant.CreatedAt.Format("02 Jan 06"),
+				grant.UpdatedAt.Format("02 Jan 06"),
+			)
+		}
 	}
 }
