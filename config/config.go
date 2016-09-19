@@ -11,6 +11,8 @@ type PermConfig struct {
 	Debug          bool
 	GithubToken    string
 	GithubUsername string
+
+	// discouraged from setting, special chars can break
 	GithubPassword string
 }
 

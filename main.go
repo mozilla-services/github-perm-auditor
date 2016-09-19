@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/google/go-github/github"
+	"github.com/howeyc/gopass"
 	"github.com/milescrabill/perm/config"
 )
 
@@ -35,7 +36,11 @@ func main() {
 	// get password
 	if conf.GithubPassword == "" {
 		log.Println("Enter GitHub password")
-		conf.GithubPassword = scan()
+		pass, err := gopass.GetPasswd()
+		if err != nil {
+			log.Fatalf("[error] could not read password: %v", err.Error())
+		}
+		conf.GithubPassword = string(pass)
 	}
 
 	// get OTP code from stdin

@@ -1,5 +1,5 @@
-hash: 82878b938b3d6c91f3218a2b3dc310320cc0a6b9e5b7d3344c6a31dc07024948
-updated: 2016-09-13T16:56:14.320653396-07:00
+hash: ae59765fde5fd7bd452e785b97650c243528c6778aacdb7aa83c4f285cfffe33
+updated: 2016-09-19T10:23:17.442180124-07:00
 imports:
 - name: github.com/google/go-github
   version: a59a35745f99ad92d70d69a9f180767063aa4bf3
@@ -9,6 +9,12 @@ imports:
   version: 9235644dd9e52eeae6fa48efd539fdc351a0af53
   subpackages:
   - query
+- name: github.com/howeyc/gopass
+  version: b63a7d07e65df376d14e2d72907a93d4847dffe4
 - name: github.com/kelseyhightower/envconfig
   version: ac12b1f15efba734211a556d8b125110dc538016
+- name: golang.org/x/crypto
+  version: e0d166c33c321d0ff863f459a5882096e334f508
+  subpackages:
+  - ssh/terminal
 testImports: []
